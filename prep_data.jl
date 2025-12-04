@@ -96,7 +96,7 @@ transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
 
 
 
-using DataFrames, ScientificTypes, MLJ, CategoricalArrays
+using  ScientificTypes, MLJ, CategoricalArrays
 
 # 1. 先把 TARGET 正确处理成二分类
 coerce!(wide_train, :TARGET => OrderedFactor{2})
@@ -147,7 +147,7 @@ end
 
 
 
-using DataFrames, ScientificTypes, MLJ, CategoricalArrays,MLJModels, StatsBase
+using MLJModels, StatsBase
 
 
 
@@ -216,3 +216,12 @@ n = ms |> length
 println("当前可用模型数量：$n 个")
 
 
+
+
+# 导入必要的模块
+using Dates
+using Serialization
+
+# 现在可以使用 now()
+data = (y=y, X=X, metadata=Dict("created"=>now()))
+serialize("data/object.rds", data)
