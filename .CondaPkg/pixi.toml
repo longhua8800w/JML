@@ -2,6 +2,8 @@
 openssl = ">=3, <3.6"
 libstdcxx = ">=3.4,<15.0"
 libstdcxx-ng = ">=3.4,<15.0"
+catboost = ">=1.1"
+numpy = ">=1,<2"
 
     [dependencies.scikit-learn]
     channel = "conda-forge"

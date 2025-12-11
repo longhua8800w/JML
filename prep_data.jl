@@ -84,7 +84,7 @@ combine(_,
 wide_train = @pipe train |>
 leftjoin(_, bureau_agg, on=:SK_ID_CURR) |>  
 leftjoin(_, prev_app_agg, on=:SK_ID_CURR) |>
-transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
+DataFrames.transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
 # 处理缺失值（示例：填充为0）
 
 
@@ -92,7 +92,7 @@ transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
 wide_test = @pipe test |>
 leftjoin(_, bureau_agg, on=:SK_ID_CURR) |>  
 leftjoin(_, prev_app_agg, on=:SK_ID_CURR) |>
-transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
+DataFrames.transform(_, names(_) .=> ByRow(x -> ismissing(x) ? 0 : x) .=> names(_))
 # 处理缺失值（示例：填充为0）
 
 
@@ -133,14 +133,17 @@ end
 
 # 4. 要剥离的高基数 + mixed 文本列
 cols_to_remove = vcat(high_card_textual, mixed_textual)
-clean_train = select(wide_train, Not(cols_to_remove))
+clean_train = DataFrames.select(wide_train, Not(cols_to_remove))
 
 println("剥离了 $(length(cols_to_remove)) 列高基数/混合文本列：")
 println(cols_to_remove)
 println("剩余列数：", ncol(clean_train))
 
 # 5. 对低基数文本列做 coerce → Multiclass（后面会自动 onehot）
-for col in low_card_textual
+
+using Base.Threads
+
+@threads for col in low_card_textual
     coerce!(clean_train, Symbol(col) => Multiclass)
 end
 
@@ -158,11 +161,11 @@ if !isempty(low_card_textual)
     println("正在进行低基数列 One-Hot 编码（终极兼容版）...")
     
     # 方法1：使用 MLJ 的 pipeline 方式（推荐）
-    hot = OneHotEncoder(features=Symbol.(low_card_textual), drop_last=false)
+    hot = MLJ.OneHotEncoder(features=Symbol.(low_card_textual), drop_last=false)
     
     # 创建 machine 并训练
     mach = machine(hot, clean_train)
-    fit!(mach)
+    MLJ.fit!(mach)
     
     # 转换数据
     clean_train = MLJ.transform(mach, clean_train)
@@ -186,14 +189,14 @@ println("\n开始把所有非 TARGET 列强制转为 Continuous（包含新生�
 
 feature_cols = setdiff(names(clean_train),  ["TARGET"]) 
 
-for col in feature_cols
+@threads  for col in feature_cols
     vec = clean_train[!, col]
     
     # 无论原来是什么鬼东西（Categorical、Real、Any、Missing），全部强转 Float64
     clean_train[!, col] = float.(coalesce.(vec, missing))
     
     # 再安全 coerce
-    coerce!(clean_train, Symbol(col) => Continuous)
+    coerce!(clean_train, Symbol(col) => ScientificTypes.Continuous)
 end
 
 println("全部特征列已成功转为 Continuous！")
@@ -225,4 +228,4 @@ using Serialization
 
 # 现在可以使用 now()
 data = (y=y, X=X, metadata=Dict("created"=>now()))
-serialize("data/object.rds", data)
+serialize("data/xy", data)
