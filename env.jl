@@ -8,6 +8,9 @@ essential_packages = [
     "MLJTuning",
     "MLJModels",
     "MLJDecisionTreeInterface",
+    "Pipe",
+    "ScientificTypes",
+    "StatsBase",
     "DecisionTree",   # 提供稳定树模型
     "DataFrames",     # 数据处理
     "CSV",            # 读写CSV

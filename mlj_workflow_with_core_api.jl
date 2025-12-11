@@ -1,13 +1,13 @@
 
 # 文件名：mlj_workflow_with_core_api.jl
 # 策略：用MLJ管理数据，用库的核心API训练，再用MLJ评估
-using Serialization,CategoricalArrays,DataFrames
+using Serialization,CategoricalArrays,DataFrames,Dates
 obj = deserialize("data/object.rds")
 
 y = obj.y
 X = obj.X
 
-
+using MLJ
 ms = models(matching(X, y))
 
 ms
