@@ -2,7 +2,7 @@
 # 文件名：mlj_workflow_with_core_api.jl
 # 策略：用MLJ管理数据，用库的核心API训练，再用MLJ评估
 using Serialization,CategoricalArrays,DataFrames,Dates
-obj = deserialize("data/object.rds")
+obj = deserialize("data/xy")
 
 y = obj.y
 X = obj.X
@@ -80,17 +80,12 @@ base_model = LGB(
     scale_pos_weight=length(y_train_num)/(2*sum(y_train_num))
 )
 
-println("   基础模型配置:")
-println("   - 目标函数: binary")
-println("   - 评估指标: auc")
-println("   - 提升类型: gbdt")
-println("   - 随机种子: 42")
+
 if base_model.is_unbalance
     println("   - 不平衡处理: 开启 (正样本比例=$(round(mean(y_train_num),digits=3)))")
 end
 
 # 4. 定义调优参数空间（AUC优化专用）
-println("\n4. ⚙️ 定义调优参数空间")
 
 tuning_ranges = [
     # 核心复杂度参数

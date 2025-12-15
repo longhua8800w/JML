@@ -28,7 +28,8 @@ essential_packages = [
     "BetaML",
     "LIBSVM",
     "NearestNeighborModels",
-    "Maxnet"
+    "Maxnet",
+    "CUDA"
 
 
 ]
