@@ -111,6 +111,7 @@ println("\n5. 🎯 配置 TreeParzen 贝叶斯优化")
 
 
 NUM_CV_FOLDS = 5
+NUM_CV_REPEATS = 6
 NUM_TP_ITER_SMALL = 30
 NUM_TP_ITER_LARGE = length(space)*50
 
@@ -120,7 +121,9 @@ tuning = MLJTuning.TunedModel(
     tuning=MLJTreeParzenTuning(max_simultaneous_draws=4),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
+    repeats=NUM_CV_REPEATS,
     measure=MLJ.auc,
+    acceleration=ComputationalResources.CPUProcesses(),
 )
 
 
@@ -145,7 +148,9 @@ tuning2 = MLJTuning.TunedModel(
     tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
+     repeats=NUM_CV_REPEATS,
     measure=MLJ.auc,
+    acceleration=ComputationalResources.CPUProcesses(),
 )
 
 
@@ -171,6 +176,7 @@ tuning3 = MLJTuning.TunedModel(
     tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
+    repeats=NUM_CV_REPEATS,
     measure=MLJ.auc,
     acceleration=ComputationalResources.CPUProcesses(),
 )
