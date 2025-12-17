@@ -2,6 +2,9 @@
 # 文件名：mlj_workflow_with_core_api.jl
 # 策略：用MLJ管理数据，用库的核心API训练，再用MLJ评估
 using Serialization,CategoricalArrays,DataFrames,Dates
+
+
+
 obj = deserialize("data/object.rds")
 
 y = obj.y
@@ -21,12 +24,11 @@ Random.seed!(42)
 y_cat = coerce(y, Multiclass)  # 必须转换为 Multiclass 类型
 #coerce!(X, autotype(X, :few_to_finite))
 
-# 数据分割：60%训练，20%验证（调优），20%测试
-train_idx, temp_idx = partition(eachindex(y_cat), 0.6, shuffle=true, rng=42)
-val_idx, test_idx = partition(temp_idx, 0.5, shuffle=true, rng=42)
+PCT_TRAIN_DATA = 0.75
+# 数据分割：训练，测试
+train_idx, test_idx = partition(eachindex(y_cat), PCT_TRAIN_DATA, shuffle=true, rng=42)
 
 X_train = X[train_idx, :]; y_train = y_cat[train_idx]
-X_val = X[val_idx, :];   y_val = y_cat[val_idx]
 X_test = X[test_idx, :]; y_test = y_cat[test_idx]
 
 
@@ -55,46 +57,13 @@ base_model = LGB(
 
 
 
-# 4. 定义调优参数空间（AUC优化专用）
-
-tuning_ranges = [
-    # 核心复杂度参数
-    range(base_model, :num_leaves, lower=20, upper=150, scale=:log),  # 叶子数量
-    range(base_model, :max_depth, lower=3, upper=12),                 # 树的最大深度
-    
-    # 学习过程参数
-    range(base_model, :learning_rate, lower=0.01, upper=0.3, scale=:log),
-    range(base_model, :num_iterations, lower=50, upper=500, scale=:log),
-    
-    # 正则化参数（防止过拟合，提升AUC）
-    range(base_model, :lambda_l1, lower=0.0, upper=10.0, scale=:log),  # L1正则化
-    range(base_model, :lambda_l2, lower=0.0, upper=10.0, scale=:log),  # L2正则化
-    range(base_model, :min_data_in_leaf, lower=10, upper=100, scale=:log),
-    
-    # 随机化参数（提升模型鲁棒性）
-    range(base_model, :feature_fraction, lower=0.6, upper=1.0),  # 特征采样比例
-    range(base_model, :bagging_fraction, lower=0.6, upper=1.0),  # 数据采样比例
-    range(base_model, :bagging_freq, lower=1, upper=10)          # bagging频率
-]
-
-println("   调优参数 (9个关键参数):")
-for (i, r) in enumerate(tuning_ranges)
-    scale_info = r.scale == :log ? "[对数尺度]" : ""
-    println("   $(lpad(i,2)). $(rpad(string(r.field), 20)): $(r.lower) → $(r.upper) $scale_info")
-end
-
-
-
-
-
-
 # 5. 配置 TreeParzen 贝叶斯优化
 println("\n5. 🎯 配置 TreeParzen 贝叶斯优化")
 
 using TreeParzen
 
 # 将 MLJ ranges 转换为 TreeParzen 的先验分布
-priors = Dict{Symbol, Any}(
+space = Dict{Symbol, Any}(
     # 迭代次数（对应num_round）
     :num_iterations => TreeParzen.HP.QuantUniform(:num_iterations, 50.0, 500.0, 1.0),
     
@@ -126,11 +95,11 @@ priors = Dict{Symbol, Any}(
     :bagging_freq => TreeParzen.HP.QuantUniform(:bagging_freq, 1.0, 10.0, 1.0)
 )
 
-println("已创建 $(length(priors)) 个参数的先验分布")
+println("已创建 $(length(space)) 个参数的先验分布")
 
 # 查看创建的先验
 println("\n先验分布配置:")
-for (key, prior) in priors
+for (key, prior) in space
     println("  $key: $prior")
 end
 
@@ -140,17 +109,15 @@ end
 # 5. 配置 TreeParzen 贝叶斯优化
 println("\n5. 🎯 配置 TreeParzen 贝叶斯优化")
 
-using TreeParzen
 
-NUM_CV_FOLDS = 4
-PCT_TRAIN_DATA = 0.75
-NUM_TP_ITER_SMALL = 25
-NUM_TP_ITER_LARGE = 250
+NUM_CV_FOLDS = 5
+NUM_TP_ITER_SMALL = 30
+NUM_TP_ITER_LARGE = length(space)*50
 
 tuning = MLJTuning.TunedModel(
     model=base_model,
-    range=priors,
-    tuning=MLJTreeParzenTuning(),
+    range=space,
+    tuning=MLJTreeParzenTuning(max_simultaneous_draws=4),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
     measure=MLJ.auc,
@@ -168,14 +135,14 @@ println("结束时间: $(now())")
 
 best_model = MLJ.fitted_params(mach).best_model
 
-suggestion = Dict(key => getproperty(best_model, key) for key in keys(priors))
+suggestion = Dict(key => getproperty(best_model, key) for key in keys(space))
 
-search = MLJTreeParzenSpace(priors, suggestion)
+search = MLJTreeParzenSpace(space, suggestion)
 
 tuning2 = MLJTuning.TunedModel(
     model=base_model,
     range=search,
-    tuning=MLJTreeParzenTuning(;random_trials=3),
+    tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
     measure=MLJ.auc,
@@ -191,21 +158,52 @@ println("结束时间: $(now())")
 
 
 
+best_model2 = MLJ.fitted_params(mach2).best_model
 
-tuning21 = MLJTuning.TunedModel(
+suggestion2 = Dict(key => getproperty(best_model2, key) for key in keys(space))
+
+search2 = MLJTreeParzenSpace(space, suggestion2)
+
+using ComputationalResources
+tuning3 = MLJTuning.TunedModel(
     model=base_model,
-    range=search,
-    tuning=MLJTreeParzenTuning(;random_trials=3, max_simultaneous_draws=2, linear_forgetting=50),
+    range=search2,
+    tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
     n=NUM_TP_ITER_SMALL,
     resampling=MLJ.CV(nfolds=NUM_CV_FOLDS),
     measure=MLJ.auc,
+    acceleration=ComputationalResources.CPUProcesses(),
 )
 
 
-
-
-mach21 = MLJ.machine(tuning21, X_train, y_train)
+mach3 = MLJ.machine(tuning3, X_train, y_train)
 
 println("开始时间: $(now())")
-MLJ.fit!(mach, verbosity=2)
+MLJ.fit!(mach3, verbosity=2)
 println("结束时间: $(now())")
+
+report(mach3)
+
+best_model3 = fitted_params(mach3).best_model
+
+MLJ.save("mdls/best_model3.jls", best_model3)
+
+
+
+
+# 2. 使用最优模型，在完整的训练集上重新训练一个专门的“推理机器”
+inference_mach = machine(best_model3, X_train, y_train)
+MLJ.fit!(inference_mach)
+
+using JLSO
+
+# This machine can now be serialized
+smach = serializable(mach3)
+JLSO.save("mdls/machine.jlso", :machine => smach)
+
+# Deserialize and restore learned parameters to useable form:
+loaded_mach = JLSO.load("mdls/machine.jlso")[:machine]
+restore!(loaded_mach)
+
+MLJ.predict(loaded_mach, X_test)
+MLJ.predict(mach3, X_test)

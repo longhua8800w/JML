@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "846a4785c2a2908b26bc7a85895d58e5f9307d72"
+project_hash = "58bfb609ad851792bf23de8b975a72a81bd8ac06"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "8b2b045b22740e4be20654175cc38291d48539db"
@@ -1311,6 +1311,12 @@ git-tree-sha1 = "0533e564aae234aff59ab625543145446d8b6ec2"
 uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
 version = "1.7.1"
 
+[[deps.JLSO]]
+deps = ["BSON", "CodecZlib", "FilePathsBase", "Memento", "Pkg", "Serialization"]
+git-tree-sha1 = "7e3821e362ede76f83a39635d177c63595296776"
+uuid = "9da8a3cd-07a3-59c0-a743-3fdc52c30d11"
+version = "2.7.0"
+
 [[deps.JSON]]
 deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "31e996f0a15c7b280ba9f76636b3ff9e2ae58c9a"
@@ -1801,6 +1807,12 @@ version = "2.28.1010+0"
 git-tree-sha1 = "b513cedd20d9c914783d8ad83d08120702bf2c77"
 uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.3"
+
+[[deps.Memento]]
+deps = ["Dates", "Distributed", "Requires", "Serialization", "Sockets", "Test", "UUIDs"]
+git-tree-sha1 = "bb2e8f4d9f400f6e90d57b34860f6abdc51398e5"
+uuid = "f28f55f0-a522-5efc-85c2-fe41dfb9b2d9"
+version = "1.4.1"
 
 [[deps.MicroCollections]]
 deps = ["Accessors", "BangBang", "InitialValues"]
