@@ -5,7 +5,7 @@ using Serialization,CategoricalArrays,DataFrames,Dates
 
 
 
-obj = deserialize("data/object.rds")
+obj = deserialize("data/xy")
 
 y = obj.y
 X = obj.X
@@ -25,21 +25,11 @@ y_cat = coerce(y, Multiclass)  # 必须转换为 Multiclass 类型
 #coerce!(X, autotype(X, :few_to_finite))
 
 PCT_TRAIN_DATA = 0.75
-# 数据分割：训练，测试
+# 数据分割：训练，测试 tscv 不能洗牌 需要保持顺序
 train_idx, test_idx = partition(eachindex(y_cat), PCT_TRAIN_DATA)
 
 X_train = X[train_idx, :]; y_train = y_cat[train_idx]
 X_test = X[test_idx, :]; y_test = y_cat[test_idx]
-
-
-# 2. AUC 评估函数
-
-using MLJBase
-function calculate_auc(mach, X_data, y_true)
-    y_prob = MLJ.predict(mach, X_data)
-    res = MLJ.auc(y_prob, y_true)
-    return res
-end
 
 
 # 加载 LightGBM 分类器
@@ -115,101 +105,21 @@ NUM_CV_REPEATS = 6
 NUM_TP_ITER_SMALL = 30
 NUM_TP_ITER_LARGE = length(space)*50
 
-tuning = MLJTuning.TunedModel(
+
+using ComputationalResources
+tuning_tscv = MLJTuning.TunedModel(
     model=base_model,
     range=space,
     tuning=MLJTreeParzenTuning(max_simultaneous_draws=4),
     n=NUM_TP_ITER_SMALL,
-    resampling=MLJ.CV(nfolds=NUM_CV_FOLDS, shuffle=true, rng=42),
+    resampling=MLJ.TimeSeriesCV(nfolds=5),
     repeats=NUM_CV_REPEATS,
     measure=MLJ.auc,
     acceleration=ComputationalResources.CPUProcesses(),
 )
 
-
-
-mach = MLJ.machine(tuning, X_train, y_train)
+mach_tscv = MLJ.machine(tuning_tscv, X_train, y_train)
 
 println("开始时间: $(now())")
-MLJ.fit!(mach, verbosity=2)
+MLJ.fit!(mach_tscv, verbosity=2)
 println("结束时间: $(now())")
-
-
-
-best_model = MLJ.fitted_params(mach).best_model
-
-suggestion = Dict(key => getproperty(best_model, key) for key in keys(space))
-
-search = MLJTreeParzenSpace(space, suggestion)
-
-tuning2 = MLJTuning.TunedModel(
-    model=base_model,
-    range=search,
-    tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
-    n=NUM_TP_ITER_SMALL,
-    resampling=MLJ.CV(nfolds=NUM_CV_FOLDS, shuffle=true, rng=42),
-     repeats=NUM_CV_REPEATS,
-    measure=MLJ.auc,
-    acceleration=ComputationalResources.CPUProcesses(),
-)
-
-
-mach2 = MLJ.machine(tuning2, X_train, y_train)
-
-println("开始时间: $(now())")
-MLJ.fit!(mach2, verbosity=2)
-println("结束时间: $(now())")
-
-
-
-
-best_model2 = MLJ.fitted_params(mach2).best_model
-
-suggestion2 = Dict(key => getproperty(best_model2, key) for key in keys(space))
-
-search2 = MLJTreeParzenSpace(space, suggestion2)
-
-using ComputationalResources
-tuning3 = MLJTuning.TunedModel(
-    model=base_model,
-    range=search2,
-    tuning=MLJTreeParzenTuning(max_simultaneous_draws=2),
-    n=NUM_TP_ITER_SMALL,
-    resampling=MLJ.CV(nfolds=NUM_CV_FOLDS, shuffle=true, rng=42),
-    repeats=NUM_CV_REPEATS,
-    measure=MLJ.auc,
-    acceleration=ComputationalResources.CPUProcesses(),
-)
-
-
-mach3 = MLJ.machine(tuning3, X_train, y_train)
-
-println("开始时间: $(now())")
-MLJ.fit!(mach3, verbosity=2)
-println("结束时间: $(now())")
-
-report(mach3)
-
-best_model3 = fitted_params(mach3).best_model
-
-MLJ.save("mdls/best_model3.jls", best_model3)
-
-
-
-
-# 2. 使用最优模型，在完整的训练集上重新训练一个专门的“推理机器”
-inference_mach = machine(best_model3, X_train, y_train)
-MLJ.fit!(inference_mach)
-
-using JLSO
-
-# This machine can now be serialized
-smach = serializable(mach3)
-JLSO.save("mdls/machine.jlso", :machine => smach)
-
-# Deserialize and restore learned parameters to useable form:
-loaded_mach = JLSO.load("mdls/machine.jlso")[:machine]
-restore!(loaded_mach)
-
-MLJ.predict(loaded_mach, X_test)
-MLJ.predict(mach3, X_test)
